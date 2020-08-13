@@ -1,0 +1,28 @@
+name: Build
+
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Clone Urho3D
+      run: git clone --depth 1 https://github.com/urho3d/Urho3D.git
+    - name: Copy contents
+      run: |
+        cp -r Source/* Urho3D/Source/
+        cp -r script/* Urho3D/script/
+    - name: Build engine
+      run: |
+        cd Urho3D
+        ./script/dockerized.sh web
+    - name: Build archive
+      run: |
+        rm -rf archive
+        mkdir archive
+        cp -r Urho3D/build/web/bin/55* archive/
+        chmod -R 777 archive
+    - uses: actions/upload-artifact@v1
+      with:
+        name: Build_Web
+        path: archive/
