@@ -27,6 +27,7 @@
 #include <Urho3D/Core/Object.h>
 #include <Urho3D/AngelScript/ScriptFile.h>
 #include <Urho3D/Resource/XMLElement.h>
+#include <Urho3D/IO/VectorBuffer.h>
 #include <list>
 #include <string>
 
@@ -45,6 +46,7 @@ public:
     void StartScripts();
     void StartSingleScript(const String& filename);
     String GetResourceContent(const String& filename);
+    void* GetResourceContentBinary(const String& filename);
 
 private:
     void AddAngelScriptFile(const String& filename, const String& content);
@@ -58,4 +60,5 @@ private:
 
     std::list<std::string> queue_;
     HashMap<String, SharedPtr<ScriptFile>> asScripts_;
+    VectorBuffer buffer_;
 };

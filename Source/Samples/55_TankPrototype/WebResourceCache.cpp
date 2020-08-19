@@ -54,6 +54,14 @@ static size_t AddResource(std::string filename, std::string content)
     return 0;
 }
 
+int MultiplyArray(float factor, uintptr_t input, int length) {
+    float* arr = reinterpret_cast<float*>(input);
+    for (int i = 0; i <  length; i++) {
+      arr[i] = factor * arr[i];
+    }
+    return 0;
+}
+
 static void LoadResourceList()
 {
     if (resourceCacheObject) {
@@ -78,6 +86,13 @@ std::string GetResource(std::string filename)
     return "";
 }
 
+void GetResourceBinary(std::string filename)
+{
+    if (resourceCacheObject) {
+        resourceCacheObject->GetResourceContentBinary(String(filename.c_str()));
+    }
+}
+
 void StartScripts()
 {
     if (resourceCacheObject) {
@@ -98,6 +113,8 @@ EMSCRIPTEN_BINDINGS(ResourceModule) {
     function("StartScripts", &StartScripts);
     function("StartSingleScript", &StartSingleScript);
     function("GetResource", &GetResource);
+    function("GetResourceBinary", &GetResourceBinary);
+    function("MultiplyArray", &MultiplyArray, allow_raw_pointers());
 }
 #endif
 
@@ -114,10 +131,9 @@ WebResourceCache::~WebResourceCache()
 
 void WebResourceCache::HandleUpdate(StringHash eventType, VariantMap& eventData)
 {
-    auto input = GetSubsystem<Input>();
+//    auto input = GetSubsystem<Input>();
 //    if (input->GetKeyPress(KEY_SPACE)) {
-//        queue_.push_back("test.json");
-//        queue_.push_back("{}");
+//        GetResourceContentBinary("Textures/Logo.png");
 //    }
     if (queue_.size() >= 2) {
         using namespace Urho3D;
@@ -338,4 +354,21 @@ String WebResourceCache::GetResourceContent(const String& filename)
     }
 
     return content;
+}
+
+void* WebResourceCache::GetResourceContentBinary(const String& filename)
+{
+    auto cache = GetSubsystem<ResourceCache>();
+    auto file = cache->GetFile(filename);
+    if (file) {
+        char buffer[file->GetSize()];
+        int read = file->Read(buffer, file->GetSize());
+        buffer_.SetData(buffer, file->GetSize());
+        URHO3D_LOGINFOF(" WebResourceCache::GetResourceContentBinary Read %d bytes", read);
+#ifdef __EMSCRIPTEN__
+        uintptr_t pointer = reinterpret_cast<uintptr_t>(buffer_.GetData());
+        val module = val::global("Module");
+        module.call<void>("BinaryFileLoaded", val(filename.CString()), val(pointer), val(file->GetSize()));
+#endif
+    }
 }
