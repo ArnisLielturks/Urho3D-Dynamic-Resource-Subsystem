@@ -14,7 +14,7 @@ jobs:
     - name: Build engine with samples
       run: |
         cd Urho3D
-        ./script/dockerized.sh web
+        ./script/dockerized.sh web rake build
     - name: Copy generated build artifacts
       run: |
         rm -rf archive
