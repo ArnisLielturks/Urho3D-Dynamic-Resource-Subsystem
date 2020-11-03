@@ -4,6 +4,10 @@ on: [push, pull_request]
 jobs:
   build_web_sample:
     runs-on: ubuntu-latest
+    env:
+      PLATFORM: web
+      BUILD_TYPE: dbg
+      DBE_TAG: latest
     steps:
     - uses: actions/checkout@v2
     - name: Clone Urho3D
