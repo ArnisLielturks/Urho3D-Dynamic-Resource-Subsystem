@@ -2,7 +2,6 @@
 
 Subsystem allows to create, read or edit existing resources in the ResourceCache.
 
-
 ## How to build
 Download all the files and place them in Urho3D project samples folder. Build project as usual with `-DURHO3D_SAMPLES=1` flag. 
 Once finished there should be 55_DynamicResourceCache binary available.
