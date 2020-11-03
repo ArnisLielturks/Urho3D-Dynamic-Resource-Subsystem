@@ -14,12 +14,12 @@ jobs:
     - name: Build engine with samples
       run: |
         cd Urho3D
-        ./script/dockerized.sh web rake build
+        ./script/dockerized.sh web rake ci build
     - name: Copy generated build artifacts
       run: |
         rm -rf archive
         mkdir archive
-        cp -r Urho3D/build/web/bin/55* archive/
+        cp -r Urho3D/build/ci/bin/55* archive/
         chmod -R 777 archive
     - uses: actions/upload-artifact@v1
       with:
