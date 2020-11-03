@@ -35,36 +35,34 @@
 #include <Urho3D/LuaScript/LuaScript.h>
 #endif
 
-#include "HelloWorld.h"
-#include "WebResourceCache.h"
+#include "SampleApp.h"
+#include "DynamicResourceCache.h"
 
 #include <Urho3D/DebugNew.h>
 
 // Expands to this example's entry-point
-URHO3D_DEFINE_APPLICATION_MAIN(HelloWorld)
+URHO3D_DEFINE_APPLICATION_MAIN(SampleApp)
 
-HelloWorld::HelloWorld(Context* context) :
+SampleApp::SampleApp(Context* context) :
     Sample(context)
 {
-    context->RegisterFactory<WebResourceCache>();
-    webResourceCache_ = SharedPtr<WebResourceCache>(new WebResourceCache(context));
+    context->RegisterFactory<DynamicResourceCache>();
+    // Register Dynamic Resource Cache as a subsystem
+    context_->RegisterSubsystem(new DynamicResourceCache(context_));
 }
 
-void HelloWorld::Start()
+void SampleApp::Start()
 {
-    // Execute base class startup
-    Sample::Start();
-
-    // Create "Hello World" Text
-    CreateText();
-
-    // Finally subscribe to the update event. Note that by subscribing events at this point we have already missed some events
-    // like the ScreenMode event sent by the Graphics subsystem when opening the application window. To catch those as well we
-    // could subscribe in the constructor instead.
-    SubscribeToEvents();
+    SubscribeToEvent(E_UPDATE, URHO3D_HANDLER(SampleApp, HandleUpdate));
 
     // Set the mouse mode to use in the sample
     Sample::InitMouseMode(MM_FREE);
+
+    ResourceCache* cache = GetSubsystem<ResourceCache>();
+    Graphics* graphics = GetSubsystem<Graphics>();
+    Image* icon = cache->GetResource<Image>("Textures/UrhoIcon.png");
+    graphics->SetWindowIcon(icon);
+    graphics->SetWindowTitle("Dynamic Resource Cache");
 
 #ifdef URHO3D_ANGELSCRIPT
     context_->RegisterSubsystem(new Script(context_));
@@ -75,35 +73,7 @@ void HelloWorld::Start()
 #endif
 }
 
-void HelloWorld::CreateText()
+void SampleApp::HandleUpdate(StringHash eventType, VariantMap& eventData)
 {
-    auto* cache = GetSubsystem<ResourceCache>();
 
-    // Construct new Text object
-    SharedPtr<Text> helloText(new Text(context_));
-    helloText->SetName("Title");
-    // Set String to display
-    helloText->SetText("Hello World from Urho3D!");
-
-    // Set font and text color
-    helloText->SetFont(cache->GetResource<Font>("Fonts/Anonymous Pro.ttf"), 30);
-    helloText->SetColor(Color(0.0f, 1.0f, 0.0f));
-
-    // Align Text center-screen
-    helloText->SetHorizontalAlignment(HA_CENTER);
-    helloText->SetVerticalAlignment(VA_CENTER);
-
-    // Add Text instance to the UI root element
-    GetSubsystem<UI>()->GetRoot()->AddChild(helloText);
-}
-
-void HelloWorld::SubscribeToEvents()
-{
-    // Subscribe HandleUpdate() function for processing update events
-    SubscribeToEvent(E_UPDATE, URHO3D_HANDLER(HelloWorld, HandleUpdate));
-}
-
-void HelloWorld::HandleUpdate(StringHash eventType, VariantMap& eventData)
-{
-    // Do nothing for now, could be extended to eg. animate the display
 }

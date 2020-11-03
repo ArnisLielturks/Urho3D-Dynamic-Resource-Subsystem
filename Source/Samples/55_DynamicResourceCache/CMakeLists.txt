@@ -21,7 +21,7 @@
 #
 
 # Define target name
-set (TARGET_NAME 55_TankPrototype)
+set (TARGET_NAME 55_DynamicResourceCache)
 
 # Define source files
 define_source_files (EXTRA_H_FILES ${COMMON_SAMPLE_H_FILES})

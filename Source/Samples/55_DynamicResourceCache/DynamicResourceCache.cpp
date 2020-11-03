@@ -26,16 +26,25 @@
 #include <Urho3D/Graphics/Material.h>
 #include <Urho3D/Graphics/Shader.h>
 #include <Urho3D/Graphics/Technique.h>
+#include <Urho3D/Graphics/Texture2D.h>
 #include <Urho3D/IO/Log.h>
 #include <Urho3D/IO/MemoryBuffer.h>
 #include <Urho3D/IO/PackageFile.h>
 #include <Urho3D/Resource/JSONFile.h>
 #include <Urho3D/Resource/ResourceCache.h>
 #include <Urho3D/Resource/XMLFile.h>
-#include <Urho3D/Input/Input.h>
-#include "WebResourceCache.h"
+#include <Urho3D/Resource/XMLElement.h>
+#include <Urho3D/IO/VectorBuffer.h>
+#include <Urho3D/Network/HttpRequest.h>
+#include <Urho3D/Network/Network.h>
 
-static WebResourceCache* resourceCacheObject = nullptr;
+#ifdef URHO3D_ANGELSCRIPT
+#include <Urho3D/AngelScript/ScriptFile.h>
+#endif
+
+#include "DynamicResourceCache.h"
+
+static DynamicResourceCache* resourceCacheObject = nullptr;
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
@@ -118,23 +127,19 @@ EMSCRIPTEN_BINDINGS(ResourceModule) {
 }
 #endif
 
-WebResourceCache::WebResourceCache(Context* context):
-        Object(context)
+DynamicResourceCache::DynamicResourceCache(Context* context):
+Object(context)
+        {
+                resourceCacheObject = this;
+        SubscribeToEvent(E_UPDATE, URHO3D_HANDLER(DynamicResourceCache, HandleUpdate));
+        }
+
+DynamicResourceCache::~DynamicResourceCache()
 {
-    resourceCacheObject = this;
-    SubscribeToEvent(E_UPDATE, URHO3D_HANDLER(WebResourceCache, HandleUpdate));
 }
 
-WebResourceCache::~WebResourceCache()
+void DynamicResourceCache::HandleUpdate(StringHash eventType, VariantMap& eventData)
 {
-}
-
-void WebResourceCache::HandleUpdate(StringHash eventType, VariantMap& eventData)
-{
-//    auto input = GetSubsystem<Input>();
-//    if (input->GetKeyPress(KEY_SPACE)) {
-//        GetResourceContentBinary("Textures/Logo.png");
-//    }
     if (queue_.size() >= 2) {
         using namespace Urho3D;
         String filename = queue_.front().c_str();
@@ -142,24 +147,86 @@ void WebResourceCache::HandleUpdate(StringHash eventType, VariantMap& eventData)
         String content = queue_.front().c_str();
         queue_.pop_front();
         URHO3D_LOGINFOF("Processing queue item: %s", filename.CString());
-        if (filename.EndsWith(".as")) {
-            AddAngelScriptFile(filename, content);
-        } else if (filename.EndsWith(".lua")) {
-            AddLuaScriptFile(filename, content);
-        } else if (filename.EndsWith(".xml")) {
-            AddXMLFile(filename, content);
-        } else if (filename.EndsWith(".json")) {
-            AddJSONFile(filename, content);
-        } else if (filename.EndsWith(".glsl")) {
-            AddGLSLShader(filename, content);
+        ProcessResource(filename, content.CString(), content.Length());
+    }
+
+#ifdef URHO3D_NETWORK
+    while (!remoteResources_.Empty()) {
+        String url = remoteResources_.Front();
+        remoteResources_.PopFront();
+        String filename = remoteResources_.Front();
+        remoteResources_.PopFront();
+
+        NetworkResourceResponse response;
+        response.first_ = filename;
+        response.second_ = VectorBuffer();
+
+        auto* network = GetSubsystem<Network>();
+        httpRequests_.Push(NetworkResourceRequest(network->MakeHttpRequest(url), response));
+        URHO3D_LOGINFOF("Loading remote resource %s from %s", filename.CString(), url.CString());
+    }
+
+    for (auto it = httpRequests_.Begin(); it != httpRequests_.End(); ++it) {
+        if (it->first_) {
+            if (it->first_->GetState() == HTTP_INITIALIZING) {
+            } else if (it->first_->GetState() == HTTP_ERROR) {
+                URHO3D_LOGERRORF("Failed to load resource from url due to error: %s", it->first_->GetError().CString());
+                httpRequests_.Erase(it);
+                break;
+            } else if (it->first_->GetState() == HTTP_CLOSED){
+                if (it->first_->GetAvailableSize() > 0) {
+                    for (int i = 0; i < it->first_->GetAvailableSize(); i++) {
+                        it->second_.second_.WriteByte(it->first_->ReadByte());
+                    }
+                } else if (it->second_.second_.GetSize() > 0){
+                    String filename = it->second_.first_;
+                    URHO3D_LOGINFOF("Remote resource %s downloaded from %s, size = %d", filename.CString(), it->first_->GetURL().CString(), it->second_.second_.GetSize());
+                    ProcessResource(filename, (const char*)it->second_.second_.GetData(), it->second_.second_.GetSize());
+                    if (filename.EndsWith(".as")) {
+                        StartSingleScript(filename);
+                    }
+                    httpRequests_.Erase(it);
+                    break;
+                }
+            }
         } else {
-            URHO3D_LOGERRORF("Unable to process file %s, no handler implemented", filename.CString());
+            httpRequests_.Erase(it);
         }
+    }
+#endif
+}
+
+void DynamicResourceCache::ProcessResource(const String& filename, const char* content, int size)
+{
+    if (filename.EndsWith(".as")) {
+        AddAngelScriptFile(filename, String(content, size));
+    } else if (filename.EndsWith(".lua")) {
+        AddLuaScriptFile(filename, String(content, size));
+    } else if (filename.EndsWith(".xml")) {
+        AddXMLFile(filename, String(content, size));
+    } else if (filename.EndsWith(".json")) {
+        AddJSONFile(filename, String(content, size));
+    } else if (filename.EndsWith(".glsl")) {
+        AddGLSLShader(filename, String(content, size));
+    } else if (IsImage(filename)) {
+        AddImageFile(filename, content, size);
+    } else {
+        URHO3D_LOGERRORF("Unable to process file %s, no handler implemented", filename.CString());
     }
 }
 
-void WebResourceCache::AddAngelScriptFile(const String& filename, const String& content)
+bool DynamicResourceCache::IsImage(const String& filename)
 {
+    return filename.EndsWith(".dds")
+           || filename.EndsWith(".jpg")
+           || filename.EndsWith(".jpeg")
+           || filename.EndsWith(".png")
+           || filename.EndsWith(".icns");
+}
+
+void DynamicResourceCache::AddAngelScriptFile(const String& filename, const String& content)
+{
+#ifdef URHO3D_ANGELSCRIPT
     SharedPtr<ScriptFile> file = SharedPtr<ScriptFile>(resourceCacheObject->GetSubsystem<ResourceCache>()->GetResource<ScriptFile>(filename));
     if (!file) {
         file = SharedPtr<ScriptFile>(new ScriptFile(context_));
@@ -181,14 +248,17 @@ void WebResourceCache::AddAngelScriptFile(const String& filename, const String& 
         module.call<void>("FileLoadFailed", val(filename.CString()));
     }
 #endif
+#else
+    URHO3D_LOGERROR("Engine built without AngelScript support!");
+#endif
 }
 
-void WebResourceCache::AddLuaScriptFile(const String& filename, const String& content)
+void DynamicResourceCache::AddLuaScriptFile(const String& filename, const String& content)
 {
     URHO3D_LOGERROR("Lua script dynamic loading is not yet supported!");
 }
 
-void WebResourceCache::AddXMLFile(const String& filename, const String& content)
+void DynamicResourceCache::AddXMLFile(const String& filename, const String& content)
 {
     SharedPtr<XMLFile> file = SharedPtr<XMLFile>(new XMLFile(context_));
     MemoryBuffer buffer((const void*) content.CString(), (unsigned) content.Length());
@@ -221,7 +291,7 @@ void WebResourceCache::AddXMLFile(const String& filename, const String& content)
     }
 }
 
-void WebResourceCache::AddJSONFile(const String& filename, const String& content)
+void DynamicResourceCache::AddJSONFile(const String& filename, const String& content)
 {
     SharedPtr<JSONFile> file = SharedPtr<JSONFile>(resourceCacheObject->GetSubsystem<ResourceCache>()->GetResource<JSONFile>(filename));
     if (!file) {
@@ -245,7 +315,7 @@ void WebResourceCache::AddJSONFile(const String& filename, const String& content
 #endif
 }
 
-void WebResourceCache::AddTechniqueFile(const String& filename, const String& content)
+void DynamicResourceCache::AddTechniqueFile(const String& filename, const String& content)
 {
     MemoryBuffer buffer((const void*) content.CString(), (unsigned) content.Length());
     SharedPtr<Technique> file = SharedPtr<Technique>(resourceCacheObject->GetSubsystem<ResourceCache>()->GetResource<Technique>(filename));
@@ -269,7 +339,7 @@ void WebResourceCache::AddTechniqueFile(const String& filename, const String& co
 #endif
 }
 
-void WebResourceCache::AddMaterialFile(const String& filename, const XMLElement& source)
+void DynamicResourceCache::AddMaterialFile(const String& filename, const XMLElement& source)
 {
     SharedPtr<Material> file = SharedPtr<Material>(resourceCacheObject->GetSubsystem<ResourceCache>()->GetResource<Material>(filename));
     if (!file) {
@@ -292,9 +362,10 @@ void WebResourceCache::AddMaterialFile(const String& filename, const XMLElement&
 #endif
 }
 
-void WebResourceCache::AddGLSLShader(const String& filename, const String& content)
+void DynamicResourceCache::AddGLSLShader(const String& filename, const String& content)
 {
     MemoryBuffer buffer((const void*) content.CString(), (unsigned) content.Length());
+    buffer.SetName(filename);
     SharedPtr<Shader> file = SharedPtr<Shader>(resourceCacheObject->GetSubsystem<ResourceCache>()->GetResource<Shader>(filename));
     if (!file) {
         file = SharedPtr<Shader>(new Shader(context_));
@@ -302,7 +373,6 @@ void WebResourceCache::AddGLSLShader(const String& filename, const String& conte
         GetSubsystem<ResourceCache>()->AddManualResource(file);
         URHO3D_LOGINFOF("Creating new manual GLSL resource %s", filename.CString());
     }
-    file->SetName(filename);
 
     bool loaded = file->Load(buffer);
 
@@ -317,32 +387,50 @@ void WebResourceCache::AddGLSLShader(const String& filename, const String& conte
 #endif
 }
 
-void WebResourceCache::AddToQueue(std::string filename, std::string content)
+void DynamicResourceCache::AddImageFile(const String& filename, const char* content, int size)
+{
+    MemoryBuffer buffer((const void*) content, size);
+    buffer.SetName(filename);
+    SharedPtr<Texture2D> file = SharedPtr<Texture2D>(resourceCacheObject->GetSubsystem<ResourceCache>()->GetResource<Texture2D>(filename));
+    if (!file) {
+        file = SharedPtr<Texture2D>(new Texture2D(context_));
+        file->SetName(filename);
+        GetSubsystem<ResourceCache>()->AddManualResource(file);
+        URHO3D_LOGINFOF("Creating new manual Material resource %s", filename.CString());
+    }
+    file->Load(buffer);
+}
+
+void DynamicResourceCache::AddToQueue(std::string filename, std::string content)
 {
     queue_.push_back(filename);
     queue_.push_back(content);
 }
 
-void WebResourceCache::StartScripts()
+void DynamicResourceCache::StartScripts()
 {
+#ifdef URHO3D_ANGELSCRIPT
     for (auto it = asScripts_.Begin(); it != asScripts_.End(); ++it) {
         if ((*it).second_->GetFunction("void Start()")) {
             URHO3D_LOGINFOF("Starting script %s", (*it).second_->GetName().CString());
             (*it).second_->Execute("void Start()");
         }
     }
+#endif
 }
 
-void WebResourceCache::StartSingleScript(const String& filename)
+void DynamicResourceCache::StartSingleScript(const String& filename)
 {
+#ifdef URHO3D_ANGELSCRIPT
     if (asScripts_.Contains(filename)) {
         if (asScripts_[filename]->GetFunction("void Start()")) {
             asScripts_[filename]->Execute("void Start()");
         }
     }
+#endif
 }
 
-String WebResourceCache::GetResourceContent(const String& filename)
+String DynamicResourceCache::GetResourceContent(const String& filename)
 {
     auto cache = GetSubsystem<ResourceCache>();
     auto file = cache->GetFile(filename);
@@ -356,7 +444,7 @@ String WebResourceCache::GetResourceContent(const String& filename)
     return content;
 }
 
-void* WebResourceCache::GetResourceContentBinary(const String& filename)
+void* DynamicResourceCache::GetResourceContentBinary(const String& filename)
 {
     auto cache = GetSubsystem<ResourceCache>();
     auto file = cache->GetFile(filename);
@@ -364,11 +452,23 @@ void* WebResourceCache::GetResourceContentBinary(const String& filename)
         char buffer[file->GetSize()];
         int read = file->Read(buffer, file->GetSize());
         buffer_.SetData(buffer, file->GetSize());
-        URHO3D_LOGINFOF(" WebResourceCache::GetResourceContentBinary Read %d bytes", read);
+        URHO3D_LOGINFOF(" DynamicResourceCache::GetResourceContentBinary Read %d bytes", read);
 #ifdef __EMSCRIPTEN__
         uintptr_t pointer = reinterpret_cast<uintptr_t>(buffer_.GetData());
         val module = val::global("Module");
         module.call<void>("BinaryFileLoaded", val(filename.CString()), val(pointer), val(file->GetSize()));
 #endif
     }
+
+    return nullptr;
+}
+
+void DynamicResourceCache::LoadResourceFromUrl(const String& url, const String& filename)
+{
+#ifdef URHO3D_NETWORK
+    remoteResources_.Push(url);
+    remoteResources_.Push(filename);
+#else
+    URHO3D_LOGERROR("Engine built without network support!");
+#endif
 }
