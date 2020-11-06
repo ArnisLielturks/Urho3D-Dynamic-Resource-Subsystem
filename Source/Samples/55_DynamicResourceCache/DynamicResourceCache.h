@@ -46,60 +46,60 @@ class URHO3D_API DynamicResourceCache : public Object {
 URHO3D_OBJECT(DynamicResourceCache, Object);
 
 public:
-/// Construct.
-explicit DynamicResourceCache(Context *context);
+    /// Construct.
+    explicit DynamicResourceCache(Context *context);
 
-/// Destruct. Free all resources.
-~DynamicResourceCache() override;
-/// Add file and content to processing queue.
-void AddToQueue(std::string filename, std::string content);
-/// Call Start() method to the dynamically loaded AngelScript files.
-void StartScripts();
-/// Start single AngelScript file.
-void StartSingleScript(const String& filename);
-/// Get textual resource data - XML,JSON, etc.
-String GetResourceContent(const String& filename);
-/// Get binary resource data - images, models, etc.
-void* GetResourceContentBinary(const String& filename);
-/// Load resource from url.
-void LoadResourceFromUrl(const String& url, const String& filename);
+    /// Destruct. Free all resources.
+    ~DynamicResourceCache() override;
+    /// Add file and content to processing queue.
+    void AddToQueue(std::string filename, std::string content);
+    /// Call Start() method to the dynamically loaded AngelScript files.
+    void StartScripts();
+    /// Start single AngelScript file.
+    void StartSingleScript(const String& filename);
+    /// Get textual resource data - XML,JSON, etc.
+    String GetResourceContent(const String& filename);
+    /// Get binary resource data - images, models, etc.
+    void* GetResourceContentBinary(const String& filename);
+    /// Load resource from url.
+    void LoadResourceFromUrl(const String& url, const String& filename);
+    /// Process single resource.
+    void ProcessResource(const String& filename, const char* content, int size);
 
 private:
-/// Add AngelScript file to the ResourceCache.
-void AddAngelScriptFile(const String& filename, const String& content);
-/// Add LUA file to the ResourceCache.
-void AddLuaScriptFile(const String& filename, const String& content);
-/// Add XML file to the ResourceCache.
-void AddXMLFile(const String& filename, const String& content);
-/// Add JSON file to the ResourceCache.
-void AddJSONFile(const String& filename, const String& content);
-/// Add GLSL file to the ResourceCache.
-void AddGLSLShader(const String& filename, const String& content);
-/// Add Material file to the ResourceCache.
-void AddMaterialFile(const String& filename, const XMLElement& source);
-/// Add Techinque file to the ResourceCache.
-void AddTechniqueFile(const String& filename, const String& content);
-/// Add Image file to the ResourceCache.
-void AddImageFile(const String& filename, const char* content, int size);
-/// Handle queue data and add resources.
-void HandleUpdate(StringHash eventType, VariantMap& eventData);
-/// Process single resource.
-void ProcessResource(const String& filename, const char* content, int size);
-/// Checks if filename has image extension.
-bool IsImage(const String& filename);
+    /// Add AngelScript file to the ResourceCache.
+    void AddAngelScriptFile(const String& filename, const String& content);
+    /// Add LUA file to the ResourceCache.
+    void AddLuaScriptFile(const String& filename, const String& content);
+    /// Add XML file to the ResourceCache.
+    void AddXMLFile(const String& filename, const String& content);
+    /// Add JSON file to the ResourceCache.
+    void AddJSONFile(const String& filename, const String& content);
+    /// Add GLSL file to the ResourceCache.
+    void AddGLSLShader(const String& filename, const String& content);
+    /// Add Material file to the ResourceCache.
+    void AddMaterialFile(const String& filename, const XMLElement& source);
+    /// Add Techinque file to the ResourceCache.
+    void AddTechniqueFile(const String& filename, const String& content);
+    /// Add Image file to the ResourceCache.
+    void AddImageFile(const String& filename, const char* content, int size);
+    /// Handle queue data and add resources.
+    void HandleUpdate(StringHash eventType, VariantMap& eventData);
+    /// Checks if filename has image extension.
+    bool IsImage(const String& filename);
 
-/// Store all incoming string data to the list.
-std::list<std::string> queue_;
-/// Remote resource queue.
-List<String> remoteResources_;
-#ifdef URHO3D_ANGELSCRIPT
-/// Custom .as script handler to support calling Start() method on them.
-    HashMap<String, SharedPtr<ScriptFile>> asScripts_;
-#endif
-/// Buffer used to serve resource data to JS.
-VectorBuffer buffer_;
-#ifdef URHO3D_NETWORK
-/// HTTP request to handle remote resource loading.
-    Vector<NetworkResourceRequest> httpRequests_;
-#endif
+    /// Store all incoming string data to the list.
+    std::list<std::string> queue_;
+    /// Remote resource queue.
+    List<String> remoteResources_;
+    #ifdef URHO3D_ANGELSCRIPT
+    /// Custom .as script handler to support calling Start() method on them.
+        HashMap<String, SharedPtr<ScriptFile>> asScripts_;
+    #endif
+    /// Buffer used to serve resource data to JS.
+    VectorBuffer buffer_;
+    #ifdef URHO3D_NETWORK
+    /// HTTP request to handle remote resource loading.
+        Vector<NetworkResourceRequest> httpRequests_;
+    #endif
 };

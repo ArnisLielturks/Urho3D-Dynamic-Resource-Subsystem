@@ -63,12 +63,57 @@ static size_t AddResource(std::string filename, std::string content)
     return 0;
 }
 
+void LoadResourceFromUrl(std::string url, std::string filename)
+{
+    if (resourceCacheObject) {
+        resourceCacheObject->LoadResourceFromUrl(String(url.c_str()), String(filename.c_str()));
+    }
+}
+
 int MultiplyArray(float factor, uintptr_t input, int length) {
     float* arr = reinterpret_cast<float*>(input);
     for (int i = 0; i <  length; i++) {
       arr[i] = factor * arr[i];
     }
     return 0;
+}
+
+
+void AddBinaryFile(std::string filename, intptr_t data, int length)
+{
+    if (resourceCacheObject) {
+        resourceCacheObject->ProcessResource(String(filename.c_str()), reinterpret_cast<const char*>(data), length);
+    }
+}
+
+void AddResourceFromBase64(std::string filename, std::string content)
+{
+    EM_ASM({
+        let filename = UTF8ToString($0);
+        let content = UTF8ToString($1);
+        function convertDataURIToBinary(dataURI) {
+            var BASE64_MARKER = ';base64,';
+            var base64Index = dataURI.indexOf(BASE64_MARKER) + BASE64_MARKER.length;
+            var base64 = dataURI.substring(base64Index);
+            var raw = window.atob(base64);
+            var rawLength = raw.length;
+            var array = new Uint8Array(new ArrayBuffer(rawLength));
+
+            for(i = 0; i < rawLength; i++) {
+            array[i] = raw.charCodeAt(i);
+            }
+            return array;
+        }
+
+        data = convertDataURIToBinary(content);
+
+        const nDataBytes = data.byteLength;
+        const dataPtr = Module._malloc(nDataBytes);
+        const dataHeap = new Uint8Array(Module.HEAPU8.buffer, dataPtr, nDataBytes);
+        dataHeap.set(new Uint8Array(data));
+        Module.AddBinaryFile("Textures/Mushroom.dds", dataHeap.byteOffset, nDataBytes);
+        Module._free(dataHeap.byteOffset);
+    }, filename.c_str(), content.c_str());
 }
 
 static void LoadResourceList()
@@ -118,6 +163,9 @@ void StartSingleScript(std::string filename)
 
 EMSCRIPTEN_BINDINGS(ResourceModule) {
     function("AddResource", &AddResource);
+    function("AddBinaryFile", &AddBinaryFile);
+    function("AddResourceFromBase64", &AddResourceFromBase64);
+    function("LoadResourceFromUrl", &LoadResourceFromUrl);
     function("LoadResourceList", &LoadResourceList);
     function("StartScripts", &StartScripts);
     function("StartSingleScript", &StartSingleScript);
@@ -210,6 +258,10 @@ void DynamicResourceCache::ProcessResource(const String& filename, const char* c
         AddGLSLShader(filename, String(content, size));
     } else if (IsImage(filename)) {
         AddImageFile(filename, content, size);
+    } else if(filename.EndsWith(".js")) {
+#ifdef __EMSCRIPTEN__
+        emscripten_run_script(content);
+#endif
     } else {
         URHO3D_LOGERRORF("Unable to process file %s, no handler implemented", filename.CString());
     }
