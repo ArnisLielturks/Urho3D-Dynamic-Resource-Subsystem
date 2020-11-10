@@ -111,7 +111,7 @@ void AddResourceFromBase64(std::string filename, std::string content)
         const dataPtr = Module._malloc(nDataBytes);
         const dataHeap = new Uint8Array(Module.HEAPU8.buffer, dataPtr, nDataBytes);
         dataHeap.set(new Uint8Array(data));
-        Module.AddBinaryFile("Textures/Mushroom.dds", dataHeap.byteOffset, nDataBytes);
+        Module.AddBinaryFil(filename, dataHeap.byteOffset, nDataBytes);
         Module._free(dataHeap.byteOffset);
     }, filename.c_str(), content.c_str());
 }
