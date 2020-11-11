@@ -51,8 +51,6 @@ public:
 
     /// Destruct. Free all resources.
     ~DynamicResourceCache() override;
-    /// Add file and content to processing queue.
-    void AddToQueue(std::string filename, std::string content);
     /// Call Start() method to the dynamically loaded AngelScript files.
     void StartScripts();
     /// Start single AngelScript file.
@@ -83,23 +81,23 @@ private:
     void AddTechniqueFile(const String& filename, const String& content);
     /// Add Image file to the ResourceCache.
     void AddImageFile(const String& filename, const char* content, int size);
+    /// Add model to ResourceCache.
+    void AddModel(const String& filename, const char* content, int size);
     /// Handle queue data and add resources.
     void HandleUpdate(StringHash eventType, VariantMap& eventData);
     /// Checks if filename has image extension.
     bool IsImage(const String& filename);
 
-    /// Store all incoming string data to the list.
-    std::list<std::string> queue_;
     /// Remote resource queue.
     List<String> remoteResources_;
     #ifdef URHO3D_ANGELSCRIPT
     /// Custom .as script handler to support calling Start() method on them.
-        HashMap<String, SharedPtr<ScriptFile>> asScripts_;
+    HashMap<String, SharedPtr<ScriptFile>> asScripts_;
     #endif
     /// Buffer used to serve resource data to JS.
     VectorBuffer buffer_;
     #ifdef URHO3D_NETWORK
     /// HTTP request to handle remote resource loading.
-        Vector<NetworkResourceRequest> httpRequests_;
+    Vector<NetworkResourceRequest> httpRequests_;
     #endif
 };

@@ -25,6 +25,7 @@
 #include <Urho3D/Graphics/GraphicsDefs.h>
 #include <Urho3D/Graphics/Material.h>
 #include <Urho3D/Graphics/Shader.h>
+#include <Urho3D/Graphics/Model.h>
 #include <Urho3D/Graphics/Technique.h>
 #include <Urho3D/Graphics/Texture2D.h>
 #include <Urho3D/IO/Log.h>
@@ -53,11 +54,10 @@ static DynamicResourceCache* resourceCacheObject = nullptr;
 
 using namespace Urho3D;
 using namespace emscripten;
-static size_t AddResource(std::string filename, std::string content)
+static size_t AddTextResource(std::string filename, std::string content)
 {
     if (resourceCacheObject) {
-        resourceCacheObject->AddToQueue(filename, content);
-        return content.length();
+        resourceCacheObject->ProcessResource(String(filename.c_str()), content.c_str(), content.length());
     }
 
     return 0;
@@ -69,15 +69,6 @@ void LoadResourceFromUrl(std::string url, std::string filename)
         resourceCacheObject->LoadResourceFromUrl(String(url.c_str()), String(filename.c_str()));
     }
 }
-
-int MultiplyArray(float factor, uintptr_t input, int length) {
-    float* arr = reinterpret_cast<float*>(input);
-    for (int i = 0; i <  length; i++) {
-      arr[i] = factor * arr[i];
-    }
-    return 0;
-}
-
 
 void AddBinaryFile(std::string filename, intptr_t data, int length)
 {
@@ -111,7 +102,7 @@ void AddResourceFromBase64(std::string filename, std::string content)
         const dataPtr = Module._malloc(nDataBytes);
         const dataHeap = new Uint8Array(Module.HEAPU8.buffer, dataPtr, nDataBytes);
         dataHeap.set(new Uint8Array(data));
-        Module.AddBinaryFil(filename, dataHeap.byteOffset, nDataBytes);
+        Module.AddBinaryFile(filename, dataHeap.byteOffset, nDataBytes);
         Module._free(dataHeap.byteOffset);
     }, filename.c_str(), content.c_str());
 }
@@ -162,7 +153,7 @@ void StartSingleScript(std::string filename)
 }
 
 EMSCRIPTEN_BINDINGS(ResourceModule) {
-    function("AddResource", &AddResource);
+    function("AddTextResource", &AddTextResource);
     function("AddBinaryFile", &AddBinaryFile);
     function("AddResourceFromBase64", &AddResourceFromBase64);
     function("LoadResourceFromUrl", &LoadResourceFromUrl);
@@ -171,7 +162,6 @@ EMSCRIPTEN_BINDINGS(ResourceModule) {
     function("StartSingleScript", &StartSingleScript);
     function("GetResource", &GetResource);
     function("GetResourceBinary", &GetResourceBinary);
-    function("MultiplyArray", &MultiplyArray, allow_raw_pointers());
 }
 #endif
 
@@ -188,16 +178,6 @@ DynamicResourceCache::~DynamicResourceCache()
 
 void DynamicResourceCache::HandleUpdate(StringHash eventType, VariantMap& eventData)
 {
-    if (queue_.size() >= 2) {
-        using namespace Urho3D;
-        String filename = queue_.front().c_str();
-        queue_.pop_front();
-        String content = queue_.front().c_str();
-        queue_.pop_front();
-        URHO3D_LOGINFOF("Processing queue item: %s", filename.CString());
-        ProcessResource(filename, content.CString(), content.Length());
-    }
-
 #ifdef URHO3D_NETWORK
     while (!remoteResources_.Empty()) {
         String url = remoteResources_.Front();
@@ -256,6 +236,8 @@ void DynamicResourceCache::ProcessResource(const String& filename, const char* c
         AddJSONFile(filename, String(content, size));
     } else if (filename.EndsWith(".glsl")) {
         AddGLSLShader(filename, String(content, size));
+    } else if (filename.EndsWith(".mdl")) {
+        AddModel(filename, content, size);
     } else if (IsImage(filename)) {
         AddImageFile(filename, content, size);
     } else if(filename.EndsWith(".js")) {
@@ -453,10 +435,18 @@ void DynamicResourceCache::AddImageFile(const String& filename, const char* cont
     file->Load(buffer);
 }
 
-void DynamicResourceCache::AddToQueue(std::string filename, std::string content)
+void DynamicResourceCache::AddModel(const String& filename, const char* content, int size)
 {
-    queue_.push_back(filename);
-    queue_.push_back(content);
+    MemoryBuffer buffer((const void*) content, size);
+    buffer.SetName(filename);
+    SharedPtr<Model> file = SharedPtr<Model>(resourceCacheObject->GetSubsystem<ResourceCache>()->GetResource<Model>(filename));
+    if (!file) {
+        file = SharedPtr<Model>(new Model(context_));
+        file->SetName(filename);
+        GetSubsystem<ResourceCache>()->AddManualResource(file);
+        URHO3D_LOGINFOF("Creating new manual Model resource %s, size=%d", filename.CString(), size);
+    }
+    file->Load(buffer);
 }
 
 void DynamicResourceCache::StartScripts()
