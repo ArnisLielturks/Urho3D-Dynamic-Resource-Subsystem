@@ -128,7 +128,7 @@ std::string GetResource(std::string filename)
         return content.CString();
     }
 
-    return "";
+    return std::string("");
 }
 
 void GetResourceBinary(std::string filename)
@@ -226,23 +226,26 @@ void DynamicResourceCache::HandleUpdate(StringHash eventType, VariantMap& eventD
 
 void DynamicResourceCache::ProcessResource(const String& filename, const char* content, int size)
 {
+    URHO3D_LOGINFOF("Processing resource with legnth %d", size);
     if (filename.EndsWith(".as")) {
-        AddAngelScriptFile(filename, String(content, size));
+        AddAngelScriptFile(filename, content, size);
     } else if (filename.EndsWith(".lua")) {
-        AddLuaScriptFile(filename, String(content, size));
+        AddLuaScriptFile(filename, content, size);
     } else if (filename.EndsWith(".xml")) {
-        AddXMLFile(filename, String(content, size));
+        AddXMLFile(filename, content, size);
     } else if (filename.EndsWith(".json")) {
-        AddJSONFile(filename, String(content, size));
+        AddJSONFile(filename, content, size);
     } else if (filename.EndsWith(".glsl")) {
-        AddGLSLShader(filename, String(content, size));
+        AddGLSLShader(filename, content, size);
     } else if (filename.EndsWith(".mdl")) {
         AddModel(filename, content, size);
     } else if (IsImage(filename)) {
         AddImageFile(filename, content, size);
     } else if(filename.EndsWith(".js")) {
 #ifdef __EMSCRIPTEN__
-        emscripten_run_script(content);
+    emscripten_run_script(std::string(content, size).c_str());
+    val module = val::global("Module");
+    module.call<void>("FileLoaded", val(filename.CString()));
 #endif
     } else {
         URHO3D_LOGERRORF("Unable to process file %s, no handler implemented", filename.CString());
@@ -258,7 +261,7 @@ bool DynamicResourceCache::IsImage(const String& filename)
            || filename.EndsWith(".icns");
 }
 
-void DynamicResourceCache::AddAngelScriptFile(const String& filename, const String& content)
+void DynamicResourceCache::AddAngelScriptFile(const String& filename, const char* content, int size)
 {
 #ifdef URHO3D_ANGELSCRIPT
     SharedPtr<ScriptFile> file = SharedPtr<ScriptFile>(resourceCacheObject->GetSubsystem<ResourceCache>()->GetResource<ScriptFile>(filename));
@@ -269,7 +272,7 @@ void DynamicResourceCache::AddAngelScriptFile(const String& filename, const Stri
         URHO3D_LOGINFOF("Creating new manual AngelScript resource %s", filename.CString());
     }
 
-    MemoryBuffer buffer((const void*) content.CString(), (unsigned) content.Length());
+    MemoryBuffer buffer(content, size);
     bool loaded = file->Load(buffer);
     asScripts_[filename] = file.Get();
 
@@ -287,20 +290,20 @@ void DynamicResourceCache::AddAngelScriptFile(const String& filename, const Stri
 #endif
 }
 
-void DynamicResourceCache::AddLuaScriptFile(const String& filename, const String& content)
+void DynamicResourceCache::AddLuaScriptFile(const String& filename, const char* content, int size)
 {
     URHO3D_LOGERROR("Lua script dynamic loading is not yet supported!");
 }
 
-void DynamicResourceCache::AddXMLFile(const String& filename, const String& content)
+void DynamicResourceCache::AddXMLFile(const String& filename, const char* content, int size)
 {
     SharedPtr<XMLFile> file = SharedPtr<XMLFile>(new XMLFile(context_));
-    MemoryBuffer buffer((const void*) content.CString(), (unsigned) content.Length());
+    MemoryBuffer buffer(content, size);
     file->Load(buffer);
     if (file->GetRoot().GetName() == "material") {
         AddMaterialFile(filename, file->GetRoot());
     } else if (file->GetRoot().GetName() == "technique") {
-        AddTechniqueFile(filename, content);
+        AddTechniqueFile(filename, content, size);
     } else {
         SharedPtr<XMLFile> file = SharedPtr<XMLFile>(resourceCacheObject->GetSubsystem<ResourceCache>()->GetResource<XMLFile>(filename));
         if (!file) {
@@ -310,7 +313,7 @@ void DynamicResourceCache::AddXMLFile(const String& filename, const String& cont
             URHO3D_LOGINFOF("Creating new manual XML resource %s", filename.CString());
         }
 
-        MemoryBuffer buffer((const void*) content.CString(), (unsigned) content.Length());
+        MemoryBuffer buffer(content, size);
         bool loaded = file->Load(buffer);
 
 #ifdef __EMSCRIPTEN__
@@ -325,7 +328,7 @@ void DynamicResourceCache::AddXMLFile(const String& filename, const String& cont
     }
 }
 
-void DynamicResourceCache::AddJSONFile(const String& filename, const String& content)
+void DynamicResourceCache::AddJSONFile(const String& filename, const char* content, int size)
 {
     SharedPtr<JSONFile> file = SharedPtr<JSONFile>(resourceCacheObject->GetSubsystem<ResourceCache>()->GetResource<JSONFile>(filename));
     if (!file) {
@@ -335,7 +338,7 @@ void DynamicResourceCache::AddJSONFile(const String& filename, const String& con
         URHO3D_LOGINFOF("Creating new manual AngelScript resource %s", filename.CString());
     }
 
-    MemoryBuffer buffer((const void*) content.CString(), (unsigned) content.Length());
+    MemoryBuffer buffer(content, size);
     bool loaded = file->Load(buffer);
 
 #ifdef __EMSCRIPTEN__
@@ -349,9 +352,9 @@ void DynamicResourceCache::AddJSONFile(const String& filename, const String& con
 #endif
 }
 
-void DynamicResourceCache::AddTechniqueFile(const String& filename, const String& content)
+void DynamicResourceCache::AddTechniqueFile(const String& filename, const char* content, int size)
 {
-    MemoryBuffer buffer((const void*) content.CString(), (unsigned) content.Length());
+    MemoryBuffer buffer(content, size);
     SharedPtr<Technique> file = SharedPtr<Technique>(resourceCacheObject->GetSubsystem<ResourceCache>()->GetResource<Technique>(filename));
     if (!file) {
         file = SharedPtr<Technique>(new Technique(context_));
@@ -396,9 +399,9 @@ void DynamicResourceCache::AddMaterialFile(const String& filename, const XMLElem
 #endif
 }
 
-void DynamicResourceCache::AddGLSLShader(const String& filename, const String& content)
+void DynamicResourceCache::AddGLSLShader(const String& filename, const char* content, int size)
 {
-    MemoryBuffer buffer((const void*) content.CString(), (unsigned) content.Length());
+    MemoryBuffer buffer(content, size);
     buffer.SetName(filename);
     SharedPtr<Shader> file = SharedPtr<Shader>(resourceCacheObject->GetSubsystem<ResourceCache>()->GetResource<Shader>(filename));
     if (!file) {
@@ -432,7 +435,16 @@ void DynamicResourceCache::AddImageFile(const String& filename, const char* cont
         GetSubsystem<ResourceCache>()->AddManualResource(file);
         URHO3D_LOGINFOF("Creating new manual Material resource %s", filename.CString());
     }
-    file->Load(buffer);
+    bool loaded = file->Load(buffer);
+#ifdef __EMSCRIPTEN__
+    if (loaded) {
+        val module = val::global("Module");
+        module.call<void>("FileLoaded", val(filename.CString()));
+    } else {
+        val module = val::global("Module");
+        module.call<void>("FileLoadFailed", val(filename.CString()));
+    }
+#endif
 }
 
 void DynamicResourceCache::AddModel(const String& filename, const char* content, int size)
@@ -446,7 +458,16 @@ void DynamicResourceCache::AddModel(const String& filename, const char* content,
         GetSubsystem<ResourceCache>()->AddManualResource(file);
         URHO3D_LOGINFOF("Creating new manual Model resource %s, size=%d", filename.CString(), size);
     }
-    file->Load(buffer);
+    bool loaded = file->Load(buffer);
+#ifdef __EMSCRIPTEN__
+    if (loaded) {
+        val module = val::global("Module");
+        module.call<void>("FileLoaded", val(filename.CString()));
+    } else {
+        val module = val::global("Module");
+        module.call<void>("FileLoadFailed", val(filename.CString()));
+    }
+#endif
 }
 
 void DynamicResourceCache::StartScripts()

@@ -66,19 +66,19 @@ public:
 
 private:
     /// Add AngelScript file to the ResourceCache.
-    void AddAngelScriptFile(const String& filename, const String& content);
+    void AddAngelScriptFile(const String& filename, const char* content, int size);
     /// Add LUA file to the ResourceCache.
-    void AddLuaScriptFile(const String& filename, const String& content);
+    void AddLuaScriptFile(const String& filename, const char* content, int size);
     /// Add XML file to the ResourceCache.
-    void AddXMLFile(const String& filename, const String& content);
+    void AddXMLFile(const String& filename, const char* content, int size);
     /// Add JSON file to the ResourceCache.
-    void AddJSONFile(const String& filename, const String& content);
+    void AddJSONFile(const String& filename, const char* content, int size);
     /// Add GLSL file to the ResourceCache.
-    void AddGLSLShader(const String& filename, const String& content);
+    void AddGLSLShader(const String& filename, const char* content, int size);
     /// Add Material file to the ResourceCache.
     void AddMaterialFile(const String& filename, const XMLElement& source);
     /// Add Techinque file to the ResourceCache.
-    void AddTechniqueFile(const String& filename, const String& content);
+    void AddTechniqueFile(const String& filename, const char* content, int size);
     /// Add Image file to the ResourceCache.
     void AddImageFile(const String& filename, const char* content, int size);
     /// Add model to ResourceCache.
